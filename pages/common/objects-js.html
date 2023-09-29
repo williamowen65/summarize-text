@@ -1,0 +1,433 @@
+<script>
+  /**
+   * Add some additional properties using a mapping,
+   * because headers/fields are different from one object source to the next
+   * @param {Object} objects rowsData object, or array of them.
+   * @param {Object} map     Of the form {existingHeaderName: newHeaderName}.
+   */
+  function mapHeaders(objects, map)
+  {
+    if (!(objects instanceof Array)) objects = [objects];
+    objects.forEach(function (object)
+    {
+      for (var prop in map)
+      {
+        // We don't want to overwrite if the mapped property already exists but the original property doesn't.
+        if (object[prop] !== undefined) object[map[prop]] = object[prop];
+      }
+    })
+    return objects;
+  }
+
+
+  /**
+   * Build new objects from existing objects using a mapping,
+   * result objects have only the new header names found in the map.
+   * @param {Object} objects rowsData object, or array of them.
+   * @param {Object} map     Of the form {existingHeaderName: newHeaderName}.
+   * @returns {Object[]}     Array of result objects (or single object if single object was passed)
+   */
+  function buildObjectsFromHeaderMap(objects, map)
+  {
+    var isArray = true;
+    if (!(objects instanceof Array))
+    {
+      isArray = false
+      objects = [objects];
+    }
+    var newObjects = objects.map(function (object)
+    {
+      var newObject = {}
+      for (var prop in map)
+      {
+        // We don't want to overwrite if the mapped property already exists but the original property doesn't.
+        newObject[map[prop]] = object[prop];
+      }
+      return newObject;
+    })
+
+    return isArray ? newObjects : newObjects[0];
+  }
+
+
+
+
+  /**
+   * Get a value from an object by searching for any key that matches a regular expression
+   * @param {Object} object
+   * @param {RegExp} regEx
+   * @returns
+   */
+  function getValueByRegExKey(object, regEx)
+  {
+    var matchKey = Object.keys(object).find(function (key)
+    {
+      return (regEx.test(key))
+    })
+    if (matchKey)
+    {
+      return object[matchKey];
+    }
+    return null;
+  }
+
+  /**
+   * Count objects by number of instances of unique values of key
+   * @param {Object[]} objects
+   * @param {string} key
+   */
+  function countBy(objects, key, options = {})
+  {
+    let filter = options.filter || {}
+    let filteredArray = objects.filter(x =>
+      x.hasOwnProperty(key) &&
+      Object.keys(filter).every(key => filter[key].includes(x[key])))
+    if (options.includeTotal !== false) options.includeTotal = true;
+    var initialValues = options.includeTotal ? { 'total': 0 } : {}
+
+    return filteredArray.reduce(function (counts, object)
+    {
+      if (object[key] !== undefined)
+      {
+        counts[object[key]] = counts[object[key]] || 0
+        counts[object[key]] += 1
+        if (options.includeTotal) counts.total += 1;
+      }
+      return counts;
+    }, initialValues)
+  }
+
+  /**
+   * Sum values for sumKey, by unique values of key
+   * @param {Object[]} objects
+   * @param {string} sumKey
+   * @param {string} byKey
+   */
+  function sumBy(objects, sumKey, byKey)
+  {
+    return objects.reduce(function (sums, object)
+    {
+      if (object[byKey] !== undefined)
+      {
+        sums[object[byKey]] = sums[object[byKey]] || 0
+        var value = (parseInt(object[sumKey], 10) || 0)
+        sums[object[byKey]] += value
+        sums.total += value;
+      }
+      return sums;
+    }, { 'total': 0 })
+  }
+
+
+  /**
+   * Sum values for sumKey, by  unique combinations of the keys in byKeys
+   * // TODO: Merge with sumBy
+   * @param {Object[]} objects
+   * @param {string} sumKey
+   * @param {string[]} byKeys If array, sum by unique combinations of those keys
+   * @param {Object} options .includeTotal (defaults to true)
+   */
+  function sumByKeys(objects, sumKey, byKeys, options)
+  {
+    options = options || {}
+    if (options.includeTotal !== false) options.includeTotal = true;
+    var initialValues = options.includeTotal ? { 'total': 0 } : {}
+    return objects.reduce(function (sums, object)
+    {
+      var key = JSON.stringify(byKeys.map(function (k) { return object[k] }))
+      sums[key] = sums[key] || 0
+      var value = (parseInt(object[sumKey], 10) || 0)
+      sums[key] += value
+      if (options.includeTotal) sums.total += value;
+      return sums;
+    }, initialValues)
+  }
+
+  /**
+   * Get sum of values for key, from an array of objects
+   * @param {Object[]} array
+   * @param {string} key
+   */
+  function sumOf(array, key)
+  {
+    return array.reduce((a, x) =>
+      a + (typeof x[key] === 'number' ? x[key] : 0),
+      0)
+  }
+
+  /**
+   * Get max value for key, from an array of objects
+   * @param {Object[]} array
+   * @param {string} key
+   */
+  function maxOf(array, key)
+  {
+    let hasKey = array.find(x => x.hasOwnProperty(key));
+    if (!hasKey)
+    {
+      return null
+    }
+    let max = hasKey[key]
+    array.forEach(x =>
+    {
+      if (x[key] > max)
+      {
+        max = x[key];
+      }
+    });
+    return max;
+  }
+
+
+  /**
+   * Get element with max value for key, from an array of objects
+   * @param {Object[]} array
+   * @param {string} key
+   */
+  function hasMaxOf(array, key)
+  {
+    let hasKey = array.find(x => x.hasOwnProperty(key));
+    if (!hasKey)
+    {
+      return null
+    }
+    let max = hasKey[key]
+    let hasMax = hasKey
+    array.forEach(x =>
+    {
+      if (x[key] > max)
+      {
+        max = x[key];
+        hasMax = x;
+      }
+    });
+    return hasMax;
+  }
+
+
+  /**
+   * Sort an array of objects by a specific key
+   * @param {Object[]} array
+   * @param {string} key
+   * @param {string} direction 'asc' or 'desc'
+   * @returns {Object[]}  The array, sorted in place
+   */
+  function sortBy(array, key, direction)
+  {
+    let numericalDirection = (direction === 'desc') ? -1 : 1;
+    return array.sort(function (a, b)
+    {
+      let aHasKey = (a.hasOwnProperty(key) && a[key] !== null && a[key] !== undefined)
+      let bHasKey = (b.hasOwnProperty(key) && b[key] !== null && b[key] !== undefined)
+      if (aHasKey && !bHasKey) return numericalDirection;
+      if (!aHasKey && bHasKey) return (-1) * numericalDirection;
+      if (!aHasKey && !bHasKey) return 0;
+      if (a[key] > b[key]) return numericalDirection;
+      if (a[key] < b[key]) return (-1) * numericalDirection;
+      return 0
+    });
+  }
+
+
+  /**
+   * Get average of a specific numeric field (averageOn) for an array of objects, optionally filtered.
+   * Average can be mean, median, or mode, depending on option averageType
+   */
+  function averageOf(array, averageOn, options = {})
+  {
+    let filter = options.filter || {}
+    let averageType = options.averageType || 'mean'
+    let filteredArray = array.filter(x =>
+      x.hasOwnProperty(averageOn) &&
+      typeof x[averageOn] === 'number' &&
+      Object.keys(filter).every(key => filter[key].includes(x[key])))
+    if (filteredArray.length === 0) return 0
+    if (averageType === 'mode')
+    {
+      // We can have multiple modes; in that case, we return the one in the middle (i.e. median of modes).
+      // This also assumes all values are integers.
+      // In general, mode is not a useful summary statistic.  A modal interval might be preferred.
+      let counts = countBy(filteredArray, averageOn, { 'includeTotal': false })
+      let modes = [], frequency = 0;
+      for (let prop in counts)
+      {
+        if (counts[prop] > frequency)
+        {
+          modes = [prop]
+          frequency = counts[prop]
+        } else if (counts[prop] === frequency)
+        {
+          modes.push(parseInt(prop, 10))
+        }
+      }
+      return (modes.length === 0 ? 0 :
+        (modes.length === 1 ? modes[0] :
+          averageOf(modes.map(x => { return { 'mode': x } }), 'mode', { 'averageType': 'median' })
+        ));
+    } else if (averageType === 'median')
+    {
+      filteredArray = sortBy(filteredArray, averageOn);
+      if (filteredArray.length % 2 === 0)
+      {
+        return (filteredArray[filteredArray.length / 2 - 1][averageOn] + filteredArray[filteredArray.length / 2 - 1][averageOn]) / 2
+      } else
+      {
+        return filteredArray[(filteredArray.length - 1) / 2][averageOn];
+      }
+    } else
+    {
+      // Default is mean
+      return filteredArray.reduce((acc, x) => (acc + x[averageOn]), 0) / filteredArray.length
+    }
+  }
+
+
+  /**
+   * Hash an array of objects by a key
+   * @param {Object[]} array 
+   * @param {string} key 
+   * @param {Object} options
+   *    strict {boolean} If true, throw error if key is absent;
+   *    keyCase {string} Convert case of key before hashing.  'lower' or 'upper';
+   *    verbose {boolean} Log a warning if key is absent;
+   *    toString {boolean} Explicitly convert keys to strings.  Default false.
+   * @return {Object} Object of form {key: Object from array}
+   */
+  function hashObjects(array, key, options)
+  {
+    options = options || {}
+    var hash = {};
+    array.forEach(function (object)
+    {
+      if (object[key])
+      {
+        var thisKey = object[key];
+        if (options.toString) thisKey = thisKey.toString();
+        if (options.keyCase == 'upper') thisKey = thisKey.toLocaleUpperCase();
+        if (options.keyCase == 'lower') thisKey = thisKey.toLocaleLowerCase();
+        hash[thisKey] = object;
+      } else
+      {
+        if (options.strict) throw new Error("Can't hash object because it doesn't have key " + key)
+        if (options.verbose) console.warn("Can't hash object because it doesn't have key " + key + ": " + JSON.stringify(object))
+      }
+    })
+    return hash
+  }
+
+
+  /**
+   * Hash an array of objects by a key, where there may be multiple elements sharing the same key
+   * @param {Object[]} array 
+   * @param {string} key 
+   * @param {Object} options
+   *    strict {boolean} If true, throw error if key is absent;
+   *    keyCase {string} Convert case of key before hashing.  'lower' or 'upper';
+   *    verbose {boolean} Log a warning if key is absent;
+   * @return {Object} Object of form {key: [Objects from array]}
+   */
+  function hashObjectsManyToOne(array, key, options)
+  {
+    options = options || {}
+    var hash = {};
+    array.forEach(function (object)
+    {
+      if (object[key])
+      {
+        var thisKey = object[key];
+        if (options.keyCase == 'upper') thisKey = thisKey.toLocaleUpperCase();
+        if (options.keyCase == 'lower') thisKey = thisKey.toLocaleLowerCase()
+        if (hash[thisKey])
+        {
+          hash[thisKey].push(object);
+        } else
+        {
+          hash[thisKey] = [object];
+        }
+
+      } else
+      {
+        if (options.strict) throw new Error("Can't hash object because it doesn't have key " + key)
+        if (options.verbose) console.warn("Can't hash object because it doesn't have key " + key + ": " + JSON.stringify(object))
+      }
+    })
+    return hash
+  }
+
+  /**
+   * Hash an array of objects by several keys, which will be joined
+   * @param {Object[]} array 
+   * @param {string[]} keys
+   * @param {Object} options
+   *    strict {boolean} If true, throw error if key is absent;
+   *    keyCase {string} Convert case of key before hashing.  'lower' or 'upper';
+   *    verbose {boolean} Log a warning if key is absent;
+   *    separator {string} Used to separate keys.  Default is '.'
+   * @return {Object} Object of form {key: Object from array}
+   */
+  function multihashObjects(array, keys, options)
+  {
+    options = options || {}
+    var separator = options.separator || '.'
+    var hash = {};
+    array.forEach(function (object)
+    {
+
+      var thisKey = keys.map(function (key) { return object[key] }).join(separator);
+      if (options.keyCase === 'upper') thisKey = thisKey.toLocaleUpperCase();
+      if (options.keyCase === 'lower') thisKey = thisKey.toLocaleLowerCase();
+
+      hash[thisKey] = object;
+
+    })
+    return hash
+  }
+
+
+  /**
+   * Hash an array of objects by a compound key, where there may be multiple elements sharing the same key
+   * @param {Object[]} array 
+   * @param {string} key 
+   * @param {Object} options
+  
+   * @return {Object} Object of form {key: [Objects from array]}
+   */
+  function multihashObjectsManyToOne(array, keys, options)
+  {
+    options = options || {}
+    var separator = options.separator || '.'
+    var hash = {};
+    array.forEach(function (object)
+    {
+      var thisKey = keys.map(function (key) { return object[key] }).join(separator);
+      if (hash[thisKey])
+      {
+        hash[thisKey].push(object);
+      } else
+      {
+        hash[thisKey] = [object];
+      }
+    })
+    return hash
+  }
+
+
+
+  /**
+   * Get a value from a data object at a particular path
+   * @param {Object} object The data object
+   * @param {string} path The path where we want to read the value, using dot notation.
+   */
+  function getValueAtPath(object, path)
+  {
+    let pathArray = path.split('.')
+    let location = object
+    while (pathArray.length > 1)
+    {
+      const prop = pathArray.shift()
+      if (!location[prop]) location[prop] = {}
+      location = location[prop] || {}
+    }
+    return location[pathArray[0]]
+  }
+</script>

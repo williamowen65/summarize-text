@@ -1,0 +1,10 @@
+{
+  "production": {
+    "instanceName": "production",
+    "appTitle": "Do It Right Plumbers - Dashboard"
+  },
+  "sandbox": {
+    "instanceName": "sandbox",
+    "appTitle": "Sandbox - Do It Right Plumbers - Dashboard"
+  }
+}

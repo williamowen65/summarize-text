@@ -1,0 +1,730 @@
+<style>
+  :root {
+    --brand-background-color: <?=BRAND_BACKGROUND_COLOR?>;
+    --brand-text-color: <?=BRAND_TEXT_COLOR?>;
+    --brand-highlight-color: <?=BRAND_HIGHLIGHT_COLOR?>;
+    --brand-primary-hover: <?=BRAND_PRIMARY_HOVER_COLOR?>;
+    --brand-primary-faded: <?=BRAND_PRIMARY_FADED_COLOR?>;
+    --brand-primary-color: <?=BRAND_PRIMARY_COLOR?>;
+    --brand-secondary-color: <?=BRAND_SECONDARY_COLOR?>;
+    --brand-secondary-hover: <?=BRAND_SECONDARY_HOVER_COLOR?>;
+    --brand-secondary-faded: <?=BRAND_SECONDARY_FADED_COLOR?>;
+    --brand-tertiary-color: <?=BRAND_TERTIARY_COLOR?>;
+    --font-size: <?=context.settings.fontSize?>px;
+  }
+
+  html {
+    font-size: var(--font-size);
+  }
+
+  q {
+    font-style: italic;
+  }
+
+  .bg-theme {
+    background-color: var(--brand-background-color);
+  }
+
+  .bg-secondary {
+    background-color: var(--brand-highlight-color) !important;
+    border-color: var(--brand-secondary-color) !important;
+  }
+
+  .bg-tertiary {
+    background-color: var(--brand-tertiary-color);
+  }
+
+  .bg-theme-inverse {
+    background-color: var(--brand-primary-color) !important;
+    color: var(--brand-background-color) !important;
+  }
+
+  a.bg-secondary:focus,
+  a.bg-secondary:hover,
+  button.bg-secondary:focus,
+  button.bg-secondary:hover,
+  .bg-secondary:hover,
+  .bg-secondary:focus {
+    background-color: var(--brand-secondary-color) !important;
+    border-color: var(--brand-highlight-color) !important;
+  }
+
+  a.call-search-link {
+    cursor: pointer;
+  }
+
+  .text-theme,
+  .color-theme {
+    color: var(--brand-text-color) !important;
+  }
+
+  .theme-button:focus,
+  .color-theme:focus {
+    box-shadow: none;
+  }
+
+  .color-theme:hover {
+    color: var(--brand-highlight-color) !important;
+  }
+
+  .color-highlight,
+  .text-highlight {
+    color: var(--brand-secondary-color) !important;
+  }
+
+  .icon-button:focus {
+    box-shadow: none;
+  }
+
+  .icon-button {
+    cursor: pointer;
+  }
+
+  a.icon-button:hover {
+    text-decoration: none;
+  }
+
+  .strikethrough {
+    text-decoration: line-through;
+  }
+
+  .color-highlight-action {
+    color: var(--brand-primary-color) !important;
+  }
+
+  .color-highlight-action:hover {
+    color: var(--brand-primary-hover) !important;
+  }
+
+
+  .border-theme {
+    border: 1px solid var(--brand-highlight-color);
+    border-radius: 5px;
+  }
+
+  .navbar-toggler {
+    background-color: var(--brand-highlight-color) !important;
+    border-color: var(--brand-secondary-color) !important;
+  }
+
+  .nav-tabs .nav-link {
+    color: var(--brand-primary-color)
+  }
+
+  .nav-tabs .nav-link.active,
+  .nav-tabs .show>.nav-link {
+    /* background-color: var(--brand-primary-color); */
+    color: var(--brand-secondary-color);
+  }
+
+  /* Data tables toolbar div */
+  .toolbar {
+    float: left;
+  }
+
+  .dropdown {
+    display: inline-block;
+  }
+
+  /*
+    Priority classes for color coding on datatables
+    These need to be in ascending order because a row may be assigned multiple priority classes
+    Higher numbers mean higher priority
+  */
+
+  /* Currently priority 0 gets no coloring */
+  /* tr.priority-0,
+  tr.priority-0 td {
+    background-image: none;
+  } */
+
+  tr.priority-1,
+  table.dataTable tr.dtrg-group.priority-1 td {
+    background: linear-gradient(rgba(0, 155, 255, 0.5),
+        rgba(0, 155, 255, 0.5));
+  }
+
+  tr.priority-2,
+  table.dataTable tr.dtrg-group.priority-2 td {
+    background: linear-gradient(rgba(255, 0, 0, 0.5),
+        rgba(255, 0, 0, 0.5));
+  }
+
+
+  table.dataTable.compact-table,
+  table.dataTable.lead-notes-table {
+    table-layout: fixed;
+    word-wrap: break-word;
+  }
+
+  table.dataTable.table-layout-fixed {
+    table-layout: fixed;
+  }
+
+
+  table.dataTable.compact-table td {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+
+  table.dataTable.lead-notes-table td {
+    white-space: normal;
+  }
+
+  table.dataTable.compact-table tr.expand-row td,
+  table.dataTable.compact-table tr.condense-row td {
+    /* Renders newlines in notes columns */
+    white-space: pre-wrap;
+  }
+
+  table.dataTable.compact-table tr.expand-row td div.scrolling-cell,
+  table.dataTable.compact-table tr.condense-row td div.scrolling-cell {
+    max-height: 10rem;
+    overflow-y: auto;
+  }
+
+  table.dataTable.compact-table thead th {
+    font-size: 0.8rem;
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+
+  /* Remove arrows from columns when sorting is disabled */
+  table.dataTable thead th.sorting_disabled:before,
+  table.dataTable thead th.sorting_disabled:after {
+    content: "" !important;
+  }
+
+  table.dataTable thead>tr>td.sorting_disabled,
+  table.dataTable thead>tr>th.sorting_disabled {
+    padding-right: unset;
+    cursor: text;
+  }
+
+  .navbar {
+    /* Modals have z-index 1050, so we need to go below them, but above everything else */
+    z-index: 1000;
+  }
+
+  .nav-right-align {
+    right: 0;
+  }
+
+  .nav-right-align button {
+    margin-right: 0;
+    padding-right: 0;
+  }
+
+  .navbar-logo {
+    height: 36px;
+    width: auto;
+  }
+
+  .invalid {
+    border-color: red;
+  }
+
+  tfoot {
+    display: table-header-group;
+  }
+
+  tfoot input {
+    width: 100%;
+    padding: 3px;
+  }
+
+  tfoot tr th,
+  table.dataTable tfoot.search-footer th,
+  table.dataTable tfoot.search-footer td {
+    padding: 8px 10px;
+    border-top: none;
+  }
+
+  thead tr th,
+  table.dataTable thead th,
+  table.dataTable thead td {
+    color: var(--brand-primary-color);
+    border-bottom: 1px solid var(--brand-primary-color) !important;
+  }
+
+  /* Limit width of some columns on tables, and overflow with ellipsis */
+  td.limited-width {
+    max-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+
+  .tooltip {
+    z-index: 50;
+  }
+
+
+  .slider-arrow {
+    margin-top: 30px;
+  }
+
+  .slider-arrow:focus {
+    box-shadow: none;
+  }
+
+  .logo-img {
+    height: auto;
+    width: 100%;
+  }
+
+  .logo-text {
+    font-size: .9rem;
+    font-weight: lighter;
+    text-transform: uppercase;
+  }
+
+  /* a,
+  a:visited,
+  a:hover {
+    color: var(--brand-secondary-color);
+  } */
+
+  .error {
+    color: var(--brand-highlight-color);
+  }
+
+  .tool-section {
+    margin-bottom: 15px;
+  }
+
+
+  /* Select2 searchable select properties */
+  .select2-container--default .select2-results__option--highlighted[aria-selected] {
+    background-color: var(--brand-tertiary-color);
+    color: var(--brand-primary-color);
+  }
+
+  /*
+  .select2-selection__rendered {
+    line-height: 31px !important;
+  }
+
+  .select2-container .select2-selection--single {
+    height: 35px !important;
+  }
+
+  .select2-selection__arrow {
+    height: 34px !important;
+
+  } */
+
+
+  /* This makes the datatables select checkboxes prettier */
+  td.select-checkbox {
+    font-family: "Helvetica Neue", HelveticaNeue, Helvetica, Arial, sans-serif;
+  }
+
+  .dte-inlineAdd .select-checkbox {
+    visibility: hidden;
+  }
+
+  /* center aligns checkbox */
+  td.select-checkbox::after,
+  td.select-checkbox::before {
+    /* center align correction */
+    top: 0.7em !important;
+  }
+
+  th.select-checkbox {
+    visibility: hidden;
+  }
+
+
+  #selectionCount::before {
+    content: '\2714';
+    /* border: 1px solid black; */
+    /* border-radius: 3px; */
+    /* text-shadow: 1px 1px #b0bed9, -1px -1px #b0bed9, 1px -1px #b0bed9, -1px 1px #b0bed9; */
+    font-family: "Helvetica Neue", HelveticaNeue, Helvetica, Arial, sans-serif;
+    margin-right: 5px;
+  }
+
+  #selectionCount {
+    text-align: center;
+    font-weight: normal;
+    font-size: small;
+    padding: 8px 0;
+  }
+
+  /* Place the page length element on the right */
+  /* .dataTables_wrapper .dataTables_length {
+    float: right;
+    margin-left: 16px;
+  } */
+
+  textarea.modal-input {
+    height: 200px;
+  }
+
+  .active-search {
+    background-color: lightsteelblue;
+  }
+
+  .default-cursor {
+    cursor: default;
+  }
+
+  /* Styling to improve the DataTable */
+  /* .dataTables_filter input {
+    padding-right: 38px !important;
+  }
+
+  .dataTables_filter label {
+    right: 0 !important;
+  }
+
+  .dataTables_filter {
+    margin-left: 30px;
+  }
+
+  .dataTables_filter .toggleSearch {
+    right: 40px !important;
+  } */
+
+  #pageTitle {
+    text-overflow: ellipsis;
+  }
+
+
+
+  .theme-button,
+  button.theme-button {
+    color: var(--brand-primary-color);
+
+  }
+
+  .theme-button:hover,
+  button.theme-button:hover {
+    color: var(--brand-primary-hover);
+
+  }
+
+  .theme-button.disabled,
+  .theme-button.no-bt,
+  .theme-button.disabled:hover,
+  .theme-button.no-bt:hover {
+    color: var(--brand-primary-faded);
+  }
+
+  button.theme-button,
+  button.theme-button:hover,
+  button.theme-button:active,
+  button.theme-button:focus,
+  button.theme-button:active:not(.disabled),
+  button.theme-button:focus:not(.disabled),
+  button.theme-button:hover:not(.disabled),
+  button.theme-button:active:not(.disabled):hover:not(.disabled) {
+    border: none;
+    background: none;
+    box-shadow: none;
+  }
+
+  button.theme-button-block {
+    background-color: var(--brand-primary-color);
+    color: var(--brand-background-color);
+  }
+
+  button.theme-button-block:hover,
+  button.theme-button-block-empty:hover {
+    color: var(--brand-background-color);
+    background-color: var(--brand-primary-hover);
+    border-color: var(--brand-primary-hover);
+  }
+
+  button.theme-button-block-empty.no-hover:hover {
+    color: var(--brand-primary-color) !important;
+    background-color: initial !important;
+  }
+
+  button.theme-button-block-empty {
+    color: var(--brand-primary-color);
+    background-color: var(--brand-background-color);
+    border: var(--brand-primary-color) solid 1px;
+  }
+
+
+  /* Drawer */
+  .drawer {
+    background-color: var(--brand-tertiary-color);
+  }
+
+  .drawer-heading {
+    background-color: var(--brand-background-color);
+  }
+
+  .fill-remaining-vertical {
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+  }
+
+  .h-98 {
+    height: 98% !important;
+  }
+
+  /* Search highlights */
+
+  table.dataTable span.fuzzy_highlight {
+    background-color: var(--brand-secondary-color);
+    border-radius: 0.28571429rem;
+  }
+
+  table.dataTable span.column_highlight {
+    background-color: #FFFF88;
+    border-radius: 0.28571429rem;
+  }
+
+  /* Show audio player button */
+  .show-player-toolbar {
+    right: 10px;
+    top: 10px;
+    z-index: 1000;
+  }
+
+  /* DT Responsive extension: expand/contract child button */
+  /* The plus that expands */
+  table.dataTable.dtr-column>tbody>tr>td.dtr-control:before,
+  table.dataTable.dtr-column>tbody>tr>th.dtr-control:before,
+  table.dataTable.dtr-column>tbody>tr>td.control:before,
+  table.dataTable.dtr-column>tbody>tr>th.control:before {
+    background-color: var(--brand-secondary-color);
+    box-shadow: none;
+    border: none;
+  }
+
+  /* The minus for contracting */
+  table.dataTable.dtr-column>tbody>tr.parent td.dtr-control:before,
+  table.dataTable.dtr-column>tbody>tr.parent th.dtr-control:before,
+  table.dataTable.dtr-column>tbody>tr.parent td.control:before,
+  table.dataTable.dtr-column>tbody>tr.parent th.control:before {
+    background-color: var(--brand-secondary-color);
+    box-shadow: none;
+    border: none;
+  }
+
+  .min-h-100 {
+    min-height: 100%;
+  }
+
+  #trimTools {
+    position: absolute;
+    z-index: 1000;
+    background-color: white;
+    width: 100%;
+    left: 0px;
+    top: 0px;
+    padding: inherit;
+  }
+
+  tr.last-clicked,
+  table.dataTable tr.last-clicked td {
+    background: linear-gradient(rgba(247, 150, 33, 0.1),
+        rgba(247, 150, 33, 0.1));
+  }
+
+  tr.no-summary,
+  table.dataTable tr.no-summary td {
+    color: darkgrey;
+  }
+
+  .initially-hidden {
+    display: none;
+  }
+
+  /* Styles for popovers in DataTables */
+  a.table-popover,
+  a.table-popover:hover {
+    cursor: pointer;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  a.table-popover:hover {
+    color: var(--brand-primary-color)
+  }
+
+  .lookup-icon {
+    color: darkgrey;
+  }
+
+  .lookup-icon.has-lookup {
+    color: var(--brand-secondary-color);
+  }
+
+  .pre-wrap {
+    white-space: pre-wrap;
+  }
+
+  .my-comment p {
+    margin: 0;
+  }
+
+  .dtr-details {
+    width: 100%;
+  }
+
+  .fixed-footer {
+    position: fixed;
+    height: fit-content;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+  }
+
+  #audio-download-dialog {
+    height: fit-content;
+    width: 300px;
+    right: 2px;
+    bottom: 1px;
+    left: auto;
+    border-color: var(--brand-primary-color);
+  }
+
+  #audio-download-dialog .card-header {
+    color: var(--brand-secondary-color);
+    background-color: var(--brand-tertiary-color);
+    border-bottom-color: var(--brand-primary-color);
+  }
+
+  #audio-download-dialog .card-body {
+    height: fit-content;
+  }
+
+  #download-indicator {
+    position: relative;
+    height: auto;
+    width: 1rem;
+  }
+
+  .one-liner {
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  button.button-separator {
+    cursor: default;
+    opacity: 0.4;
+  }
+
+  .button-separator:hover,
+  button.button-separator:hover {
+    cursor: default;
+    color: var(--brand-primary-color);
+    opacity: 0.4;
+  }
+
+  div.dt-buttons {
+    cursor: default;
+  }
+
+  div.inline-p p {
+    display: inline;
+  }
+
+  table thead th.vertical-header {
+    writing-mode: vertical-lr;
+    text-orientation: sideways;
+  }
+
+  /* Avoid horizontal spillover on editor forms */
+  .DTE_Form_Content .row {
+    margin-right: 0;
+    margin-left: 0;
+  }
+
+  /* .no-priority {} */
+  .low-priority {
+    background-color: yellow;
+  }
+
+  .medium-priority {
+    background-color: orange;
+  }
+
+  .high-priority {
+    background-color: red;
+  }
+
+  /* Min height for table rows when empty */
+  .trh-1 {
+    height: 1.5rem;
+  }
+
+  div.no-margin-label label {
+    margin: 0 !important;
+  }
+
+  .confirm-edit-icon {
+    color: orange;
+  }
+
+  .confirm-edit-icon:hover {
+    color: darkorange;
+  }
+
+  .negative-currency {
+    color: red;
+  }
+
+  /* Place this div in a td with position:relative so it will wrap text up to the available height, then truncate */
+  .cell-wrap-truncate {
+    position: absolute;
+    overflow: hidden;
+    /* This doesn't do anything, see discussion here;  https://stackoverflow.com/questions/15909489/text-overflow-ellipsis-on-two-lines */
+    /* But line-clamp solutions don't work since we don't know the number of lines a priori */
+    /* text-overflow: ellipsis; */
+    top: 0;
+    left: 0;
+    max-height: 100%;
+    max-width: 100%;
+  }
+
+  td.dt-body-bold {
+    font-weight: bold;
+  }
+
+  td.dt-body-border-left {
+    border-left: 1px solid var(--brand-primary-color);
+  }
+
+  .highlight {
+    background-color: #FFFF88;
+  }
+
+  .bold {
+    font-weight: bold;
+  }
+
+  .text-truncate-3 {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    white-space: normal;
+    overflow: hidden;
+  }
+
+  .w-fit {
+    width: fit-content !important;
+  }
+
+  .minw-100 {
+    min-width: 100% !important;
+  }
+
+  .no-bt {
+    cursor: pointer;
+  }
+</style>

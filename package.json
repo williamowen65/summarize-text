@@ -1,0 +1,22 @@
+{
+  "name": "do-it-right-dashboard",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aaron-dunigan-atlee/do-it-right-dashboard.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/aaron-dunigan-atlee/do-it-right-dashboard/issues"
+  },
+  "homepage": "https://github.com/aaron-dunigan-atlee/do-it-right-dashboard#readme",
+  "devDependencies": {
+    "@types/google-apps-script": "^1.0.70"
+  }
+}

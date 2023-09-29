@@ -1,0 +1,6 @@
+.clasp.json
+.clasprc.json
+.clasp*
+.DS_Store
+temp.*
+node_modules/
