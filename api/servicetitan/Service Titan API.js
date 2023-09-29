@@ -1,10 +1,25 @@
-var Api = (function (ns = {})
-{
-  var API_NAME = ''
+var Vertex = (function (ns = {}) {
+  var API_NAME = 'Vertex'
 
-  ns.something = function ()
-  {
-    return fetch('GET', 'endpoint')
+  ns.checkService = checkService
+
+  ns.getSummary = function () {
+
+    const instance = {
+      content: "This is a test string to Google Vertex AI."
+    };
+
+    const payload = {
+      "instances": [instance],
+      "parameters": []
+    };
+
+    return fetch(
+      'POST',
+      `projects/testing-project-400518/locations/us-east1/publishers/google/models/text-bison@001:predict`,
+      payload
+    )
+
   }
 
 
@@ -13,50 +28,63 @@ var Api = (function (ns = {})
   // -----------------
   // Private functions
 
-  function fetch(method, endpoint, payload, queryParams, backoffOptions)
-  {
+  // -----------------
+  // Private functions
 
-    var root = '';
-
-    var url = root + endpoint;
-    console.log("Calling %s endpoint %s with method %s", API_NAME, url, method)
+  function fetch(method, endpoint, payload) {
+    var root = 'https://us-east1-aiplatform.googleapis.com/v1/';
+    console.log("Calling Google speech-to-text endpoint '%s' with method %s", root + endpoint, method)
 
     var params = {
       'method': method,
-      'headers': getHeaders()
+      'headers': {
+        'Authorization': "Bearer " + ScriptApp.getOAuthToken(),
+        // 'Authorization': "Bearer " + getService().getAccessToken(),
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      }
     };
-
-    if (queryParams)
-    {
-      url = FetchTools.formQueryUrl(url, queryParams)
-      if (DEBUG) console.log("Query params are %s", JSON.stringify(queryParams))
-    }
-
-    if (payload)
-    {
+    if (payload) {
       params.payload = JSON.stringify(payload)
-      if (DEBUG) console.log("Payload is %s", JSON.stringify(payload))
+      console.log("Payload is %s", JSON.stringify(payload))
     }
     if (DEBUG) params.muteHttpExceptions = true;
 
-    var response = FetchTools.backoffOne(url, params, backoffOptions);
+    var response = FetchTools.backoffOne(root + endpoint, params);
     var content = response.getContentText();
     // Some endpoints return empty response.
-    if (!content)
-    {
-      console.log("%s returned an empty response", API_NAME)
+    if (!content) {
+      console.log("API returned an empty response")
       return null;
     }
-    if (DEBUG) console.log(content)
+    console.log(content)
     var json = JSON.parse(content);
     return json;
+
   }
 
-  function getHeaders()
-  {
-    return {
-      'Accept': 'application/json',
-      'Content-Type': 'application/json',
+  function getService() {
+    var propertyStore = PropertiesService.getScriptProperties()
+    // For auth details see 
+    // https://stackoverflow.com/questions/61466912/how-can-i-authorize-google-speech-to-text-from-google-apps-script
+    // and https://cloud.google.com/speech-to-text/docs/before-you-begin
+    return OAuth2.createService('Speech-To-Text Token')
+      .setTokenUrl('https://oauth2.googleapis.com/token')
+      // TODO: Move these to props
+      // .setPrivateKey(propertyStore.getProperty('speech_to_text_private_key'))
+      // .setIssuer("audio-transcription@prison-call-review.iam.gserviceaccount.com")
+      .setPropertyStore(PropertiesService.getScriptProperties())
+      .setScope('https://www.googleapis.com/auth/cloud-platform');
+  }
+
+  function checkService() {
+    var service = getService();
+    if (service.hasAccess()) {
+      console.log(service.getAccessToken());
+    } else {
+      console.log(service.getLastError());
     }
   }
+
+
 })()
