@@ -1,9 +1,11 @@
-var Vertex = (function (ns = {}) {
+var Vertex = (function (ns = {})
+{
   var API_NAME = 'Vertex'
 
   ns.checkService = checkService
 
-  ns.getSummary = function () {
+  ns.getSummary = function ()
+  {
 
     const instance = {
       content: "This is a test string to Google Vertex AI."
@@ -31,7 +33,8 @@ var Vertex = (function (ns = {}) {
   // -----------------
   // Private functions
 
-  function fetch(method, endpoint, payload) {
+  function fetch(method, endpoint, payload)
+  {
     var root = 'https://us-east1-aiplatform.googleapis.com/v1/';
     console.log("Calling Google speech-to-text endpoint '%s' with method %s", root + endpoint, method)
 
@@ -44,7 +47,8 @@ var Vertex = (function (ns = {}) {
         'Content-Type': 'application/json'
       }
     };
-    if (payload) {
+    if (payload)
+    {
       params.payload = JSON.stringify(payload)
       console.log("Payload is %s", JSON.stringify(payload))
     }
@@ -53,7 +57,8 @@ var Vertex = (function (ns = {}) {
     var response = FetchTools.backoffOne(root + endpoint, params);
     var content = response.getContentText();
     // Some endpoints return empty response.
-    if (!content) {
+    if (!content)
+    {
       console.log("API returned an empty response")
       return null;
     }
@@ -63,7 +68,8 @@ var Vertex = (function (ns = {}) {
 
   }
 
-  function getService() {
+  function getService()
+  {
     var propertyStore = PropertiesService.getScriptProperties()
     // For auth details see 
     // https://stackoverflow.com/questions/61466912/how-can-i-authorize-google-speech-to-text-from-google-apps-script
@@ -77,11 +83,14 @@ var Vertex = (function (ns = {}) {
       .setScope('https://www.googleapis.com/auth/cloud-platform');
   }
 
-  function checkService() {
+  function checkService()
+  {
     var service = getService();
-    if (service.hasAccess()) {
+    if (service.hasAccess())
+    {
       console.log(service.getAccessToken());
-    } else {
+    } else
+    {
       console.log(service.getLastError());
     }
   }
