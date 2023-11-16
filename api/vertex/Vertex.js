@@ -1,9 +1,10 @@
 var Vertex = (function (ns = {})
 {
   var API_NAME = 'Vertex'
+  const projectName = PropertiesService.getScriptProperties().getProperty('projectName')
 
   // Summarize text
-  // See https://console.cloud.google.com/vertex-ai/publishers/google/model-garden/text-bison?project=testing-project-400518
+  // See https://console.cloud.google.com/vertex-ai/publishers/google/model-garden/text-bison?project=${projectName}
   // for a list of parameters
   // and https://cloud.google.com/vertex-ai/docs/samples/aiplatform-sdk-summarization#aiplatform_sdk_summarization-java
   // https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/predict
@@ -115,12 +116,149 @@ var Vertex = (function (ns = {})
 
     return fetch(
       'POST',
-      `projects/testing-project-400518/locations/us-central1/publishers/google/models/text-bison@001:predict`,
+      `projects/${projectName}/locations/us-central1/publishers/google/models/text-bison@001:predict`,
       payload
     )
 
   }
 
+  /**
+   * Get text embeddings
+   * @param {object[]} instances {
+      `task_type`: `RETRIEVAL_DOCUMENT`,
+      `title`: `document title`,
+      `content`: `I would like embeddings for this text!`
+    },
+   * @returns
+   * https://console.cloud.google.com/vertex-ai/publishers/google/model-garden/textembedding-gecko?_ga=2.205902227.1696244492.1700001671-1266742486.1668452585&project=prison-call-review
+   * https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/text-embeddings#text-embedding-drest
+   */
+  ns.getEmbeddings = function (instances)
+  {
+    const payload = {
+      "instances": instances
+    };
+
+    return fetch(
+      'POST',
+      `projects/${projectName}/locations/us-central1/publishers/google/models/textembedding-gecko@002:predict`,
+      payload
+    )
+  }
+
+  /**
+ * Create an index for Vector Search
+ * https://cloud.google.com/vertex-ai/docs/vector-search/create-manage-index
+ */
+  ns.createIndex = function (indexName, fileDirectory)
+  {
+    const payload = {
+      "display_name": indexName,
+      "metadata": {
+        "contentsDeltaUri": fileDirectory,
+        "config": {
+          // Text embeddings are in 768 dimensions
+          "dimensions": 768,
+          // TODO: experiment with this value
+          "approximateNeighborsCount": 3,
+          "distanceMeasureType": "DOT_PRODUCT_DISTANCE",
+          "algorithm_config": {
+            "treeAhConfig": {
+              // Accept defaults, but we may need to modify this
+              // "leafNodeEmbeddingCount": 500,
+              // "leafNodesToSearchPercent": 7
+            }
+          }
+        }
+      }
+    }
+
+    return fetch(
+      'POST',
+      `projects/${projectName}/locations/us-central1/indexes`,
+      payload
+    )
+  }
+
+  /**
+  * Create an index endpoint for Vector Search
+  * https://cloud.google.com/vertex-ai/docs/vector-search/create-manage-index
+  */
+  ns.createIndexEndpoint = function (endpointName)
+  {
+    const payload = {
+      "displayName": endpointName,
+    }
+
+    return fetch(
+      'POST',
+      `projects/${projectName}/locations/us-central1/indexEndpoints`,
+      payload
+    )
+  }
+
+
+  /**
+  * List index endpoints for Vector Search
+  * https://cloud.google.com/vertex-ai/docs/vector-search/create-manage-index
+  */
+  ns.listIndexEndpoints = function ()
+  {
+    return fetch(
+      'GET',
+      `projects/${projectName}/locations/us-central1/indexEndpoints`
+    )
+  }
+
+  /**
+  * Deploy an index to an endpoint for Vector Search
+  * https://cloud.google.com/vertex-ai/docs/vector-search/create-manage-index
+  */
+  ns.deployIndex = function (endpoint, index, id)
+  {
+    const payload = {
+      "deployedIndex": {
+        "id": id,
+        "index": index
+      }
+    }
+
+    return fetch(
+      'POST',
+      `projects/${projectName}/locations/us-central1/indexEndpoints/${endpoint}:deployIndex`,
+      payload
+    )
+  }
+
+  ns.listIndexes = function ()
+  {
+    return fetch(
+      'GET',
+      `projects/${projectName}/locations/us-central1/indexes`
+    )
+  }
+
+
+  ns.getOperation = function (id)
+  {
+    return fetch(
+      'GET',
+      `projects/${projectName}/locations/us-central1/operations/${id}`
+    )
+  }
+
+  // https://cloud.google.com/vertex-ai/docs/vector-search/query-index-public-endpoint
+  ns.queryEndpoint = function (endpointUrl, endpointId, query)
+  {
+    return fetch(
+      'POST',
+      `/v1/projects/${projectName}/locations/us-central1/indexEndpoints/${endpointId}:findNeighbors`,
+      query,
+      { url: endpointUrl }
+    )
+  }
+  // $ curl - X POST - H "Content-Type: application/json" - H "Authorization: Bearer `gcloud auth print-access-token`"  https://1957880287.us-central1-181224308459.vdb.vertexai.goog/v1/projects/${PROJECT_ID}/locations/us-central1/indexEndpoints/${INDEX_ENDPOINT_ID}:readIndexDatapoints  -d '{deployed_index_id:"test_index_public1", ids: ["606431", "896688"]}'
+  // $ curl -X POST -H "Content-Type: application/json" -H "Authorization: Bearer `gcloud auth print-access-token`"  https://1957880287.us-central1-181224308459.vdb.vertexai.goog/v1/projects/181224308459/locations/us-central1/indexEndpoints/3370566089086861312:findNeighbors -d '{deployed_index_id: "test_index_public1", queries: [{datapoint: {datapoint_id: "0", feature_vector: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}, neighbor_count: 5}]}'
 
   return ns;
 
@@ -130,9 +268,9 @@ var Vertex = (function (ns = {})
   // -----------------
   // Private functions
 
-  function fetch(method, endpoint, payload)
+  function fetch(method, endpoint, payload, options = {})
   {
-    var root = 'https://us-central1-aiplatform.googleapis.com/v1/';
+    var root = options.url || 'https://us-central1-aiplatform.googleapis.com/v1/';
     console.log("Calling Google speech-to-text endpoint '%s' with method %s", root + endpoint, method)
 
     var params = {
