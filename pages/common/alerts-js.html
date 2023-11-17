@@ -1,0 +1,117 @@
+<script>
+
+  /**
+   * Show a bootstrap alert in a colored bar at the top of the page (or parent element).
+   * options: 
+   *    message: 
+   *    parent: css selector for the parent element of the alert.  Defaults to 'body'
+   *    type: Type of alert.  Determines the color scheme.  Defaults to 'info.'  
+   *              Can be 'info', 'success', 'danger' ('error'), 'warning', 'light','dark','primary','secondary'
+   *    autoClose: boolean.  Defaults to true.
+   *    timeout: Milliseconds timeout before auto close (if set).  Default: 10000 (10 seconds)
+   */
+  function showAlert(options)
+  {
+    options = options || {}
+    if (!options.message) return;
+
+    // Close any previous alert:
+    $('#cactus-alert').remove()
+
+    // In case we forget that there isn't an error class. 
+    if (options.type == 'error') options.type = 'danger'
+
+    // Default to info
+    var alertClass = 'alert-' + (options.type || 'info')
+
+    var closeButton = '' +
+      '<button type="button" class="close" data-dismiss="alert" aria-label="Close">' +
+      '<span aria-hidden="true">&times;</span>' +
+      '</button>';
+
+    var alertDiv = $('<div>')
+      .attr('id', 'cactus-alert')
+      .attr('class', 'alert alert-dismissible fade show')
+      .addClass(alertClass)
+      .attr('role', 'alert')
+      .html(options.message)
+      .attr('style', 'opacity: 90%; z-index: 950; white-space: pre-wrap;')
+      //.attr('style', 'white-space: pre-wrap;')
+      .append(closeButton);
+
+    // This usually follows a server-side call, so hide the loading sign.
+    hideLoadingSign();
+
+    const $parentContainer = $(options.parent || '#page-container');
+    if ($parentContainer.length > 0) $parentContainer.prepend(alertDiv);
+    else $("body").prepend(alertDiv);
+    $('#cactus-alert').get(0).scrollIntoView();
+
+    // Auto close after some seconds
+    if (options.autoClose !== false)
+    {
+      setTimeout(
+        function () { alertDiv.alert('close'); },
+        options.timeout || 10000
+      );
+    }
+  }
+
+  /**
+   * Handle errors returned from server-side script.
+   */
+  function somethingWentWrong(err)
+  {
+    // This usually follows a server-side call, so hide the loading sign.
+    hideLoadingSign()
+    showAlert({
+      message: "Something went wrong:\n" + err.message,
+      type: 'error',
+      autoClose: false
+    })
+  }
+
+  /**
+   * Show a bootstrap alert allowing users to redirect to a specified page.
+   * @param {Object} options: 
+   *    message: The message to display on the alert, including any HTML content.
+   *    parent: css selector for the parent element of the alert.
+   *    buttonMessage: The message to display in the button. Defaults to 'Click here to continue'
+   *    href: The url to redirect to. Defaults to window.location.href
+   */
+  function showRedirect(options) {
+
+    // Options must be an object
+    options = options || {}
+
+    // Build the redirect command used below
+    const redirectCommand = `window.open('${options.href || 'window.location.href'}', '_top')`;
+
+    // Set button text
+    const buttonMessage = options.buttonMessage || 'Continue';
+
+    // Build redirect content
+    const message = 
+    `<div class='text-center'>` +
+    (options.message || '') +
+    `<br><br>` +
+    `<button class="btn btn-primary" onclick="${redirectCommand}">` +
+    buttonMessage +
+    `</button>` +
+    `</div>`;
+
+    // Empty the parent container
+    const $parentContainer = $(options.parent || '#page-container');
+    if ($parentContainer.length > 0) $parentContainer.empty();
+    else $("body").empty();
+
+    showAlert({
+      message: message,
+      parent: options.parent,
+      type: 'success',
+      autoClose: false
+    })
+
+  }
+
+</script>

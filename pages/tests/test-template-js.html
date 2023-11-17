@@ -1,0 +1,99 @@
+<script>
+
+  function onQuerySubmit(deployedIndexId, projectId, userCallback) {
+
+    // Return a function that will be called when the user clicks the submit button
+    return () => { 
+
+      // Get the query and neighbor count from the form
+      const queryText = $("#queryInput").val();
+      const neighborCount = parseInt($("#resultsInput").val());
+      console.log(neighborCount);
+
+      // Get calls and invoke the query endpoint
+      showLoadingSign();
+      const projectCallsPromise = googleScriptRunNoSpinner("getProjectCalls", projectId);
+      const queryPromise = googleScriptRunNoSpinner(
+        "queryEndpoint",
+        deployedIndexId,
+        queryText,
+        neighborCount
+      );
+
+      // Trigger handler once all promises have resolved
+      Promise.all([projectCallsPromise, queryPromise]).then((responses) => {
+        const [ projectCalls, queryResponse ] = responses;
+        onQueryFinished(projectCalls, queryResponse);
+      });
+      
+    };
+
+    function onQueryFinished(projectCalls, queryResponse) {
+
+      // console.log(projectCalls);
+      console.log(queryResponse);
+
+      // Get an array of call objects in the form { id: string, distance: number }
+      const nearestNeighbors = queryResponse.nearestNeighbors[0].neighbors;
+      const selectedCalls = nearestNeighbors.map((neighbor) => {
+        return { id: neighbor.datapoint.datapointId, distance: neighbor.distance };
+      });
+
+      // Sort the selected calls by distance in decreasing order
+      selectedCalls.sort((a, b) => b.distance - a.distance);
+
+      // Clear the table body
+      const $table = $(".calls-table");
+      const $tableBody = $table.find("tbody");
+      $tableBody.children().not(".template").remove();
+      $table.removeClass("d-none");
+
+      // Clone the row template and append to the table for each call
+      selectedCalls.forEach((call) => {
+
+        // Get the call object from the project calls array
+        const callObject = projectCalls.find((projectCall) => projectCall.fbKey === call.id);
+
+        // Generate HTML for the call transcript, make a string with brs between each sentence delemited by the [
+        const transcript = callObject.summary
+          ?.split("[")
+          .filter(Boolean)
+          .map((phrase, index, self) => (self.length > 1 ? "[" : "") + phrase)
+          .join("<br>")
+          .trim();
+
+        // Clone the row template and append to the table
+        const $row = $(".call-row.template").clone();
+        $row.removeClass("template d-none");
+        console.log($row);
+        $row.find(".call-id").text(call.id || "N/A");
+        $row.find(".call-distance").text(call.distance.toFixed(3) || "N/A");
+        $row.find(".call-transcript").html(transcript || "N/A");
+        $tableBody.append($row);
+
+      });
+
+      // Hide the loading sign
+      hideLoadingSign();
+
+    }
+
+    /* queryResponse format is:
+      {
+        nearestNeighbors: [
+          {
+            id: string,
+            neighbors: [
+              {
+                datapoint: { datapointId: string }, THIS IS THE CALL ID
+                distance: number
+              }
+            ] 
+          }
+        ] 
+      }
+    */
+
+  }
+
+</script>

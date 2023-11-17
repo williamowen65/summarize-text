@@ -1,0 +1,1393 @@
+<?!= include('pages/common/alerts-js.html', context) ?>
+
+<script>
+  const context = JSON.parse("<?= JSON.stringify(context) ?>")
+
+  // Other global constants
+  var users
+
+  const DATE_COLUMN_WIDTH = "5rem";
+  const USER_COLUMN_WIDTH = "10rem";
+  const DATE_FORMAT = "M/D/YY"
+  const DATETIME_FORMAT = "M/D/YY h:mm:ss a"
+  // We will store percents as integers, and divide them by this value to get a decimal
+  const PERCENT_PRECISION = 1000000
+
+  const INTAKE_PACKAGE_CACHE_KEY_PREFIX = 'intakePackage-';
+  const CONSIGN_PACKAGE_CACHE_KEY_PREFIX = 'consignPackage-';
+
+  var expandedGroups = {}, expandAll = false;
+
+  //  Max width (in characters) of text before truncating and displaying in a tooltip
+  var MAX_TEXT_WIDTH = 25
+
+  // These lead fields are also on the "loan figures" table of the loan object,
+  // so we need to keep them in sync
+  const SYNCED_LOAN_FIGURES = [
+    'rate', // interest rate
+    'value', // price/value
+    'loanAmount' // Initial Loan Balance
+  ]
+  const fontAwesomeSpinner = '<i class="fas fa-spinner fa-spin"></i>'
+
+
+  // Add timezone functionality to dayjs
+  dayjs.extend(window.dayjs_plugin_utc)
+  dayjs.extend(window.dayjs_plugin_timezone)
+  dayjs.extend(window.dayjs_plugin_customParseFormat)
+  DateTime.use(dayjs)
+
+  // Global event handlers
+  $(document).ready(function ()
+  {
+    $(document).on('change', '.modal-input[required]', onChangeModalInput)
+    $(document).on("shown.bs.modal", '.modal', function ()
+    {
+      $(this).filter('.modal-input').removeClass('invalid')
+    })
+
+    $(document).on('change', '.cactus-input[required]', function () { $(this).removeClass('invalid') })
+    $(document).on('click', '.modal-cancel', clearModalFormFields)
+
+    // $('.card .collapse').on('hide.bs.collapse', onHideCollapse)
+    // $('.card .collapse').on('show.bs.collapse', onShowCollapse)
+
+    // This prevents popovers from closing when clicked inside, while using trigger: 'focus'
+    // See https://stackoverflow.com/a/49025957
+    $('body').on('mousedown', '.popover', function (e)
+    {
+      e.preventDefault()
+    });
+
+  })
+
+
+  function onHideCollapse(event)
+  {
+    $(this).closest('.card').find('i.collapse-toggle')
+      .removeClass('fa-window-minimize')
+      .addClass('fa-window-maximize')
+  }
+
+  function onShowCollapse(event)
+  {
+    $(this).closest('.card').find('i.collapse-toggle')
+      .addClass('fa-window-minimize')
+      .removeClass('fa-window-maximize')
+  }
+
+  function transferData()
+  {
+    google.script.run
+      .withFailureHandler(somethingWentWrong)
+      .withSuccessHandler(triggerTransferData)
+      .fetchDashboardData()
+  }
+
+  function triggerTransferData(data)
+  {
+
+    $(document).trigger('data:transfer', data)
+  }
+
+
+  function onChangeModalInput(e)
+  {
+    var input = $(this)
+    if (input.attr('type') === 'file')
+    {
+      if (input.prop('files').length > 0) input.removeClass('invalid')
+    } else
+    {
+      if (input.val()) input.removeClass('invalid')
+    }
+  }
+
+
+  function getEditorOptionsField(key, placeholder)
+  {
+    return {
+      type: "select2",
+      options: getEditorOptionsFieldOptions(key),
+      opts: {
+        allowClear: true,
+        placeholder: {
+          id: null,
+          text: placeholder || '--'
+        },
+        dropdownAutoWidth: true
+      }
+    }
+  }
+
+  function standardSelect2Field(name, options, placeholder)
+  {
+    return {
+      name: name,
+      type: "select2",
+      options: options.map(x => ({ value: x, label: x })),
+      opts: {
+        allowClear: true,
+        placeholder: {
+          id: null,
+          text: placeholder || '--'
+        },
+        dropdownAutoWidth: true
+      }
+    }
+  }
+
+  // Get the list of options, in DataTables editor format, for a given field
+  function getEditorOptionsFieldOptions(key, options = {})
+  {
+    if (/user\./.test(key))
+    {
+      const role = key.split('.')[1]
+
+      let userIds = Object.keys(context.users)
+        .filter(id => context.users[id].active && context.users[id].roles[role])
+      // If specified, filter for alone officers who are certified in a specific state
+      if (options.state) userIds = userIds.filter(id => context.users[id].states && context.users[id].states[options.state])
+      return userIds.map(id => ({ value: id, label: context.users[id].name }))
+    } else
+    {
+      if (!context.options[key]) return []
+      const choices = context.options[key].options
+      return Object.entries(choices)
+        .map(([key, option]) => Object.assign(option, { key: key }))
+        .sortBy('sequence', 'asc')
+        .map(option =>
+        {
+          return { value: option.key, label: option.value }
+        })
+    }
+  }
+
+
+  /**
+   * Supply a search function to each search box
+   */
+  function createColumnSearchboxes(table)
+  {
+    let tableNode = table.table().node()
+    const foot = $('<tfoot>').insertAfter($(tableNode).find('thead'))
+    table.columns().every(function (index, column)
+    {
+      // If searching customer service notes, apply the search to the combined customer service + client notes
+      var column = this;
+      let title = $(column.header()).text()
+      let id = title.replace(/\s/g, '') + "-search";
+      let footerCell = $('<th></th>');
+      if (table.init().columns[index]?.searchable !== false)
+      {
+        footerCell.html('<input type="text" placeholder="Search ' + title + '" id="' + id + '" />');
+        $('input', footerCell).on('keyup change clear', function ()
+        {
+          if (column.search() !== this.value)
+          {
+            // Apply search and draw table.
+            column.search(this.value).draw();
+
+            // Highlight the search box when the search is active.
+            $(this).toggleClass('active-search', Boolean(this.value))
+          }
+        });
+      }
+      foot.append(footerCell)
+
+    });
+  }
+
+
+  /**
+   * Apply a search function to each column
+   * rowGroupOptions: .disableRowGroup, .rowGroupField
+   * See https://datatables.net/examples/api/multi_filter.html
+   *
+   */
+  function applyColumnSearchboxes(table)
+  {
+    table.columns().every(function ()
+    {
+      var column = this;
+
+      $('input', this.footer()).on('keyup change clear', function ()
+      {
+        if (column.search() !== this.value)
+        {
+
+          // Apply search and draw table.
+          column.search(this.value).draw();
+
+          // Highlight the search box when the search is active.
+          $(this).toggleClass('active-search', Boolean(this.value))
+
+        }
+      });
+    });
+  }
+
+
+
+  function setColumnSearchboxes(id, columns)
+  {
+    const footerRow = $("#" + id + " tfoot tr")
+    columns.forEach(column =>
+    {
+      const th = $('<th></th>')
+      if (column.searchable !== false)
+        th.html('<input type="text" placeholder="Search ' + column.title + '" />')
+      footerRow.append(th)
+    })
+
+  }
+
+
+  function stripPhoneNumber(badFormatPhone)
+  {
+    if (!badFormatPhone) return ''
+    let goodFormatPhone = badFormatPhone.toString().replace(/\D/g, '')
+    return goodFormatPhone
+  }
+
+  /**
+   * Render long text as truncated with the full text in the tooltip or popover
+   * See https://datatables.net/forums/discussion/32240/how-to-implement-a-popup-tooltip-on-a-datatables-cell-that-displays-all-data
+   * But we've chosen not to use bootstrap-style tooltips because they don't play well with datatables
+   */
+  function renderTruncated(text, type, rowData, meta)
+  {
+    if (type === 'display' && typeof text === 'string')
+    {
+      if (text.length < MAX_TEXT_WIDTH) return text
+      if ($.fn.popover)
+      {
+        return `<a tabindex="0" class="table-popover" data-toggle="popover" data-html="true" data-trigger="hover"
+          data-content='${text}'>${text.slice(0, MAX_TEXT_WIDTH)}…</a>`
+      } else
+      {
+        return '<span title="' + text + '">' + text.slice(0, MAX_TEXT_WIDTH) + '…</span>'
+      }
+    } else
+    {
+      return text
+    }
+  }
+
+  /**
+   * Get the next page of data
+   */
+  function fetchMoreData(functionName, args, dataTable, continuationToken)
+  {
+    if (continuationToken !== null)
+    {
+      google.script.run
+        .withSuccessHandler(onLoadMoreData)
+        .withFailureHandler(somethingWentWrong)
+        .withUserObject({ 'functionName': functionName, 'args': args, 'dataTable': dataTable })
+      [functionName](args, continuationToken);
+    } else
+    {
+      hideLoadingData();
+      if (context.urlParams.row) showRow(dataTable, context.urlParams.row);
+      if (context.urlParams.rowgroup) showRowgroup(dataTable, context.urlParams.rowgroup)
+    }
+  }
+
+  /**
+   * Update the table with another page of data
+   */
+  function onLoadMoreData(result, config)
+  {
+    result = JSON.parse(result);
+
+    // Assign 'select' property b/c DataTables doesn't like undefined values in objects
+    result.data.forEach(function (row)
+    {
+      row.select = ''
+    })
+    config.dataTable
+      .rows.add(result.data)
+      .columns.adjust() // Auto-adjust column widths
+      .draw(false);
+
+    // For issues data only: store user emails
+    if (result.users) users = result.users
+
+    // Get next page
+    fetchMoreData(config.functionName, config.args, config.dataTable, result.continuationToken);
+  }
+
+  function showRow(table, rowId)
+  {
+    try
+    {
+      var row = table.row('#' + rowId)
+      // Go to page for this row
+      row.show()
+      // Expand only the row's rowgroup if it exists
+      if (table.rowGroup().enabled())
+      {
+        expandedGroups = {}
+        expandedGroups[row.data()[table.rowGroup().dataSrc()]] = true;
+      }
+      // Select row
+      table.rows().deselect()
+      row.select()
+
+      // Draw table
+      table.draw(false)
+
+      // Attempt to scroll to row
+      if (row.node()) row.node().scrollIntoView()
+
+      // Click to expand child table if it exists
+      $(row.node()).find('div.child-control').click()
+
+    } catch (err)
+    {
+      console.warn("Unable to find row %s: %s", rowId, err.message)
+    }
+  }
+
+  function showRowgroup(table, rowGroupId)
+  {
+    try
+    {
+      // Expand only the row's rowgroup if it exists
+      if (table.rowGroup().enabled())
+      {
+        expandedGroups = {}
+        expandedGroups[rowGroupId] = true;
+      }
+
+      // Draw table (we draw again below but in case the below fails:)
+      table.draw(false)
+
+      // Find any row in this group.
+      var row = table.row('.rowgroup-' + rowGroupId)
+      // Go to page for this row
+      row.show().draw(false)
+
+      // Attempt to scroll to row
+      if (row.node()) row.node().scrollIntoView()
+
+    } catch (err)
+    {
+      console.warn("Unable to find row group %s: %s", rowGroupId, err.message)
+    }
+  }
+
+  function renderUserEmail(email)
+  {
+    return (email || '').toString().split('@')[0]
+  }
+
+  /**
+   * Toggle the enabled/disabled status of toolbar buttons if rows are selected
+   */
+  function onSelectRows(e, dt, type, indexes)
+  {
+    // Apparently this gets triggered on, e.g. selection of text in the search inputs, not just on row selection.
+    // By inspection, the row selection has namespace 'dt'
+    if (e.namespace !== "dt") return;
+
+    // Don't allow selection for rows pending payment
+    if (e.type === 'select' && type === 'row')
+    {
+      var rows = dt.rows(indexes).nodes().to$();
+      $.each(rows, function ()
+      {
+        if ($(this).hasClass('pending-payment')) table.row($(this)).deselect();
+      })
+    }
+    // Disable/enable buttons based on number of rows selected
+    // Selected rows. Not the same as rows, above, because we may have deselected
+    var selectedRows = dt.rows('.selected').data().toArray();
+    var selectionCount = selectedRows.length
+    if (selectionCount === 0)
+    {
+      $('#dataTableToolbar button').attr('disabled', 'disabled')
+      $('#dataTableToolbar button.always-enabled').removeAttr('disabled')
+    } else
+    {
+      // Enable all buttons, then selectively disable those that don't apply, below
+      $('#dataTableToolbar button').removeAttr('disabled')
+    }
+
+    // Some buttons only make sense if one row is selected
+    if (selectionCount > 1)
+    {
+      $('#dataTableToolbar .single-selection-button').attr('disabled', 'disabled')
+    }
+
+    // Some buttons allow for multi selection but only if the rows are all services for the same client
+    if (!selectedRows.every(function (row)
+    {
+      return row.clientidpass && row.clientidpass === selectedRows[0].clientidpass
+    }))
+    {
+      $('#dataTableToolbar .same-client-selection-button').attr('disabled', 'disabled')
+    }
+
+    // Update status indicator for selection count
+    $('#selectionCount').text(selectionCount)
+
+  }
+
+  var loadingSign = '' +
+    '<div id="loading-sign-container" class="d-flex align-items-center justify-content-center" style="position: fixed; top: 0; bottom: 0; left: 0; right: 0; z-index: 500">' +
+    '<div id="loading-sign-spinner" class="spinner-border " role="status"></div>' +
+    '</div>';
+
+  function showLoadingSign(parent = 'body', color = 'var(--loading-sign-color)', backgroundColor = 'rgba(0,0,0,.7)')
+  {
+    $('#cactus-alert').remove()
+    var parentElement = $(parent)
+    parentElement.append(loadingSign);
+    $('#loading-sign-container').css('background-color', backgroundColor);
+    $('#loading-sign-spinner').css('color', color);
+  }
+
+  function hideLoadingSign()
+  {
+    $('#loading-sign-container').remove();
+  }
+
+  function showLoadingSignOnModal(parent = 'body', color = 'white', backgroundColor = 'rgba(0,0,0,.7)')
+  {
+    var modalloadingSign = '' +
+      '<div id="loading-sign-container" class="d-flex align-items-center justify-content-center" style="position: fixed; top: 0; bottom: 0; left: 0; right: 0; z-index: 1500">' +
+      '<div id="loading-sign-spinner" class="spinner-border " role="status"></div>' +
+      '</div>';
+    var parentElement = $(parent)
+    parentElement.append(modalloadingSign);
+    $('#loading-sign-container').css('background-color', backgroundColor);
+    $('#loading-sign-spinner').css('color', color);
+  }
+
+  var loadingData = '<div id="loading-data" class="alert alert-info">Loading data ...</div>'
+
+  function showLoadingData()
+  {
+    $('#page-container').prepend(loadingData);
+    $('#dataTableToolbar button').attr('disabled', 'disabled')
+  }
+
+  function hideLoadingData()
+  {
+    $('#loading-data').remove();
+    // Don't enable buttons until rows are selected
+    // $('#dataTableToolbar button').removeAttr('disabled')
+    $('#dataTableToolbar button.always-enabled').removeAttr('disabled')
+  }
+
+
+  function removeAlerts()
+  {
+    $('#cactus-alert').remove()
+  }
+
+  /**
+   * Show a bootstrap alert in a colored bar at the top of the page (or parent element).
+   * options:
+   *    message:
+   *    parent: css selector for the parent element of the alert.  Defaults to '#page-container'
+   *    type: Type of alert.  Determines the color scheme.  Defaults to 'info.'
+   *              Can be 'info', 'success', 'danger' ('error'), 'warning', 'light','dark','primary','secondary'
+   *    autoClose: boolean.  Defaults to true.
+   *
+   */
+  // function showAlert(options)
+  // {
+  //   options = options || {}
+  //   if (!options.message) return;
+
+  //   // Close any previous alert:
+  //   $('#cactus-alert').remove()
+
+  //   // In case we forget that there isn't an error class.
+  //   if (options.type == 'error') options.type = 'danger'
+
+  //   // Default to info
+  //   var alertClass = 'alert-' + (options.type || 'info')
+
+  //   var closeButton = '' +
+  //     '<button type="button" class="close" data-dismiss="alert" aria-label="Close">' +
+  //     '<span aria-hidden="true">&times;</span>' +
+  //     '</button>';
+
+  //   var alertDiv = $('<div>')
+  //     .attr('id', 'cactus-alert')
+  //     .attr('class', 'alert alert-dismissible fade show')
+  //     .addClass(alertClass)
+  //     .attr('role', 'alert')
+  //     .html(options.message)
+  //     .attr('style', 'opacity: 90%; z-index: 950; white-space: pre-wrap;')
+  //     .append(closeButton);
+
+  //   // This usually follows a server-side call, so hide the loading sign.
+  //   hideLoadingSign()
+  //   $(options.parent || '#page-container').prepend(alertDiv)
+  //   // $('#cactus-alert').get(0).scrollIntoView();
+
+  //   // Auto close after some seconds
+  //   if (options.autoClose !== false)
+  //   {
+  //     setTimeout(
+  //       function ()
+  //       {
+  //         alertDiv.alert('close');
+  //       },
+  //       10000
+  //     );
+  //   }
+  // }
+
+  function showAlertOnModal(options)
+  {
+    options.parent = $('.modal:visible .modal-body')
+    showAlert(options)
+  }
+
+  /**
+   * Handle errors returned from server-side script.
+   */
+  // function somethingWentWrong(err)
+  // {
+  //   console.error(err.message)
+  //   hideLoadingSign()
+  //   closeModal()
+  //   showAlert({
+  //     message: "Something went wrong:\n" + err.message,
+  //     type: 'error',
+  //     // Leave it open for purposes of reporting it
+  //     autoClose: false
+  //   })
+  // }
+
+  /**
+   * Handle errors returned from server-side script.
+   */
+  function somethingWentWrongOnModal(err)
+  {
+    console.error(err.message)
+    hideLoadingSign()
+    showAlertOnModal({
+      message: "Something went wrong:\n" + err.message,
+      type: 'error',
+      // Leave it open for purposes of reporting it
+      autoClose: false
+    })
+  }
+
+  /**
+   * Used after a change in status:
+   * Remove the selected rows from the table, and then display the alert
+   */
+  function removeSelectedRowsAndShowAlert(options, table)
+  {
+    console.log(JSON.stringify(options))
+    clearModalFormFields()
+    // De-select before removing, to trigger onSelectRows and update the selectionCount.
+    table.rows('.selected').deselect().remove()
+    table.columns.adjust()
+    table.draw(false)
+    showAlert(options)
+  }
+
+  /**
+   * Used after a change in substatus:
+   * Update the selected rows based on returned data, and then display the alert
+   */
+  function updateRowsAndShowAlert(config, table)
+  {
+    config = JSON.parse(config)
+    clearModalFormFields()
+    // Update rows
+    if (config.updatedRows)
+    {
+      config.updatedRows.forEach(function (updatedRow)
+      {
+        var row = null, childTable = null;
+        // MCL
+        if (updatedRow.serviceId)
+        {
+          row = table.row('#' + updatedRow.serviceId)
+        }
+        // Pipeline
+        else if (updatedRow.leadId)
+        {
+          row = table.row('#' + updatedRow.leadId)
+        }
+        if (row && row.length > 0)
+        {
+          row.data(updatedRow)
+          assignColorClass(row.node(), row.data(), colorMap)
+          childTable = $(row.child()).find('table').DataTable()
+          if (childTable)
+          {
+            childTable.clear()
+              .rows.add(updatedRow.serviceNotes)
+              .draw();
+          }
+        }
+
+      })
+    }
+
+    // Unselect and redraw table
+    table.rows().deselect()
+    table.columns.adjust()
+    table.draw(false);
+
+    // Alert
+    showAlert(config)
+  }
+
+
+  /**
+   * Append the returned rows, and then display the alert
+   */
+  function appendRowsAndShowAlert(config, table)
+  {
+    config = JSON.parse(config)
+    clearModalFormFields()
+    // Append rows
+    if (config.appendRows)
+    {
+      table.rows.add(config.appendRows)
+        // Assign color classes if specified
+        .every(function ()
+        {
+          // 'this' = the row
+          assignColorClass(this.node(), this.data(), colorMap)
+        })
+    }
+
+    // Unselect and redraw table
+    table.rows().deselect()
+    table.columns.adjust()
+    table.draw(false);
+
+    // Alert
+    showAlert(config)
+  }
+
+  /**
+   * Clear all modal form fields so they are blank for next use.
+   */
+
+  function clearModalFormFields()
+  {
+    $('.modal-input').val('')
+    $('.modal-input.form-check-input').prop('checked', false)
+  }
+
+
+  function assignColorClass(row, data, colorMap)
+  {
+    if (!colorMap) return;
+    colorMap.forEach(function (mapping)
+    {
+      var colorTier
+      if (mapping.tiers)
+      {
+        var colorValue = parseInt(data[mapping.field], 10)
+        if (colorValue !== NaN)
+        {
+          colorTier = mapping.tiers.find(function (tier)
+          {
+            if (colorValue >= tier.minValue)
+            {
+              $(row).addClass(tier.priorityClass);
+              return true
+            } else
+            {
+              $(row).removeClass(tier.priorityClass)
+              return false
+            }
+          })
+        }
+      } else if (mapping.classes)
+      {
+        colorTier = mapping.classes.find(function (colorClass)
+        {
+          if (data[mapping.field] === colorClass.value)
+          {
+            $(row).addClass(colorClass.priorityClass);
+            return true
+          } else
+          {
+            $(row).removeClass(colorClass.priorityClass)
+            return false
+          }
+        })
+      }
+    })
+  } // assignColorClass()
+
+
+  function closeModal()
+  {
+    $(".modal").modal("hide");
+  }
+
+  function validateRequiredInputs(parentSelector = '#page-container', message)
+  {
+    message = message || 'The fields in red are required'
+    var complete = true
+    // Required inputs
+    $(parentSelector).find('input,textarea,select').filter('[required]:visible').each(function ()
+    {
+      var input = $(this)
+      if (!input.val())
+      {
+        input.addClass('invalid')
+        complete = false
+      } else
+      {
+        input.removeClass('invalid')
+      }
+    })
+
+    // Required file inputs
+    $('input[type="file"]').filter('[required]:visible').each(function ()
+    {
+      var requiredInput = $(this)
+      if (requiredInput.prop('files').length === 0)
+      {
+        requiredInput.addClass('invalid')
+        complete = false;
+      } else
+      {
+        requiredInput.removeClass('invalid')
+      }
+    });
+
+    if (!complete) showAlert({
+      'type': 'error',
+      'message': message,
+      'parent': $(parentSelector)
+    })
+    return complete
+  }
+
+  function validateEmailInputs(parentSelector = '#page-container')
+  {
+
+    let complete = true;
+    let emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    $(parentSelector).find('input[type="email"]:visible').each(function ()
+    {
+
+      const $thisInput = $(this);
+
+      if (emailRegex.test($thisInput.val()) === false)
+      {
+        $thisInput.addClass('invalid')
+        complete = false;
+      } else
+      {
+        $thisInput.removeClass('invalid')
+      }
+
+    });
+
+    if (!complete) showAlert({
+      'type': 'error',
+      'message': 'The email address is invalid',
+      'parent': $(parentSelector)
+    })
+
+    return complete;
+
+  }
+
+  function getSelectedRowData()
+  {
+    return table.row('.selected').data()
+  }
+
+  function getSelectedRowsData()
+  {
+    return table.rows('.selected').data().toArray()
+  }
+
+
+  // Returns an Array of normalized Strings.
+  // Empty Strings are returned for all Strings that could not be successfully normalized.
+  // Arguments:
+  //   - headers: Array of Strings to normalize
+  function normalizeHeaders(headers)
+  {
+    return headers.map(normalizeHeader)
+  }
+
+  // Normalizes a string, by removing all alphanumeric characters and using mixed case
+  // to separate words. The output will always start with a lower case letter.
+  // This function is designed to produce JavaScript object property names.
+  // Arguments:
+  //   - header: string to normalize
+  // Examples:
+  //   "First Name" -> "firstName"
+  //   "Market Cap (millions) -> "marketCapMillions
+  //   "1 number at the beginning is ignored" -> "numberAtTheBeginningIsIgnored"
+  function normalizeHeader(header)
+  {
+    var key = "";
+    var upperCase = false;
+    for (var i = 0; i < header.length; ++i)
+    {
+      var letter = header[i];
+      if (letter == " " && key.length > 0)
+      {
+        upperCase = true;
+        continue;
+      }
+      if (!isAlnum_(letter))
+      {
+        continue;
+      }
+      if (key.length == 0 && isDigit_(letter))
+      {
+        continue; // first character must be a letter
+      }
+      if (upperCase)
+      {
+        upperCase = false;
+        key += letter.toUpperCase();
+      } else
+      {
+        key += letter.toLowerCase();
+      }
+    }
+    return key;
+  }
+
+
+  // Returns true if the character char is alphabetical, false otherwise.
+  function isAlnum_(char)
+  {
+    return char >= 'A' && char <= 'Z' ||
+      char >= 'a' && char <= 'z' ||
+      isDigit_(char);
+  }
+
+  // Returns true if the character char is a digit, false otherwise.
+  function isDigit_(char)
+  {
+    return char >= '0' && char <= '9';
+  }
+
+  /* Datatables Plug-ins */
+
+  /* row().show(): https://datatables.net/plug-ins/api/row().show() */
+  $.fn.dataTable.Api.register('row().show()', function ()
+  {
+    var page_info = this.table().page.info();
+    // Get row index
+    var new_row_index = this.index();
+    // Row position
+    var row_position = this.table()
+      .rows({ search: 'applied' })[0]
+      .indexOf(new_row_index);
+    // Already on right page ?
+    if ((row_position >= page_info.start && row_position < page_info.end) || row_position < 0)
+    {
+      // Return row object
+      return this;
+    }
+    // Find page number
+    var page_to_display = Math.floor(row_position / this.table().page.len());
+    // console.log("Jumping to page %s", page_to_display)
+    // Go to that page
+    this.table().page(page_to_display)
+    // Return row object
+    return this;
+  });
+
+  function clearModalAndShowAlert(config)
+  {
+    clearModalFormFields()
+    showAlert(config)
+  }
+
+
+  /**
+   * Expand a table row when clicked, but not if a selection has been made, so we can copy or paste
+   */
+  function onClickTableRow()
+  {
+    var selection = window.getSelection();
+    if (selection.toString().length > 0) return
+    var row = $(this).parent()
+    if (!row.hasClass('child-table')) row.toggleClass('expand-row')
+  }
+
+  /**
+ * Show/hide a child table
+ */
+  function onClickDetailsControl(event)
+  {
+    var tr = $(this).closest('tr');
+    var row = tr.closest('table').DataTable().row(tr);
+    var rowData = row.data();
+
+    if (row.child.isShown())
+    {
+      // This row is already open - close it
+      row.child.hide();
+      // Set icon
+      // tr.find('.show-child-icon').addClass('fa-angle-right').removeClass('fa-angle-down')
+    } else
+    {
+      // Open this row and set a data table
+      row.child(event.data.childTableCreator(rowData)).show();
+
+      // Create the DataTable instance
+      let childTable = $(row.child()).find('table')
+      childTable.DataTable(event.data.initOptions(childTable, rowData.leadId))
+        .rows.add(rowData[event.data.childKey][event.data.childSubkey] || [])
+        // .columns.adjust() // Auto-adjust column widths
+        .draw(false);
+      // Set icon
+      // tr.find('.show-child-icon').removeClass('fa-angle-right').addClass('fa-angle-down')
+    }
+  }
+
+  /**
+   * Convert a mysql timestamp (utc) to a dayjs in local timezone
+   */
+  function timestampToLocalDayjs(timestamp)
+  {
+    return dayjs.tz(timestamp, "UTC").tz(TIMEZONE)
+  }
+
+  function getUtcTimestamp()
+  {
+    return dayjs().tz('UTC').format('YYYY-MM-DD HH:mm:ss')
+  }
+
+
+  /**
+   * Get the DataTable for the table with the given id
+   * If id is not passed, return the DataTable with id 'table', or else the first datatable on the page.
+   */
+  function getDataTable(id)
+  {
+    if (id)
+    {
+      let selector = '#' + id
+      if (!$.fn.DataTable.isDataTable(selector)) return null;
+      return $(selector).DataTable();
+    } else
+    {
+      if ($.fn.DataTable.isDataTable('#table'))
+      {
+        return $('#table').DataTable();
+      } else
+      {
+        let tables = $('table').filter(function (index, element)
+        {
+          return $.fn.DataTable.isDataTable(element)
+        })
+        if (tables.length > 0)
+        {
+          return tables.first().DataTable()
+        } else
+        {
+          return null
+        }
+      }
+    }
+  }
+
+
+  /**
+   * @param {Jquery} parent
+   */
+  function initializePopovers(parent)
+  {
+    parent = parent || $('body')
+    parent.find('[data-toggle="popover"]').popover({
+      trigger: 'focus',
+      sanitize: false,
+    })
+  }
+
+  /**
+   * Populate a DataTable from an object, usually from Firebase
+   */
+  function populateTable(id, dataObject)
+  {
+    getDataTable(id).clear()
+      .rows.add(firebaseListToArray(dataObject))
+      .draw()
+  }
+
+  // Set the key of each object as a property
+  function firebaseListToArray(dataObject)
+  {
+    return Object.keys(dataObject)
+      .map(k => Object.assign(dataObject[k], { 'fbKey': k }))
+  }
+
+  /**
+   * Validate required or conditionally required editor fields.
+   * This can be called from the ajax function with validateEditorFields(this, success),
+   * If a modification has been made to the editor code: see https://datatables.net/forums/discussion/73987/get-editor-reference-within-editor-ajax-function#latest
+   */
+  function validateEditorFields(editor, success)
+  {
+    const fieldErrors = []
+    editor.order().forEach(fieldName =>
+    {
+      const field = editor.field(fieldName)
+      const value = field.get()
+      // No value? Check if required
+      if ((value === null || value === '' || value === undefined))
+      {
+        // Absolutely required fields
+        // Note field.s.opts is the set of options passed to the field.  This is not documented so may change in future versions.
+        if ((field.s.opts.required || $(field.input()).attr('required')))
+        {
+          fieldErrors.push({ name: fieldName, status: 'Required' })
+        }
+        // Conditionally required fields
+        // field.requiredIf should be a function where "this" is set to the editor instance, and returns a Boolean
+        else if (typeof field.s.opts.requiredIf === 'function' && field.s.opts.requiredIf.call(editor))
+        {
+          fieldErrors.push({ name: fieldName, status: 'Required' })
+        }
+      }
+    })
+    if (fieldErrors.length > 0)
+    {
+      success({ 'fieldErrors': fieldErrors })
+      return false
+    }
+    return true
+  }
+
+
+  function validateInline(editor, data, success)
+  {
+    const fieldErrors = []
+    for (var fieldName in Object.values(data.data)[0])
+    {
+      const field = editor.field(fieldName)
+      const value = field.get()
+      if ($(field.input()).attr('required') && (value === null || value === '' || value === undefined))
+      {
+        fieldErrors.push({ name: fieldName, status: 'Required' })
+      }
+    }
+    if (fieldErrors.length > 0)
+    {
+      success({ 'fieldErrors': fieldErrors })
+      return false
+    }
+    return true
+  }
+
+
+  /**
+     * Handle tab change
+     */
+  function onShowTab(event)
+  {
+    // Remove any alerts, which foul up the tab changes.
+    $('#cactus-alert').remove()
+
+  }
+
+  /**
+     * Handle tab change
+     */
+  function onShownTab(event)
+  {
+    // Re-draw the data table on this tab (they don't draw nicely when not visible)
+    // var tabFrom = $(event.relatedTarget)
+    var tabTo = $(event.target)
+    var tableName = tabTo.data('tablename')
+    // console.log("Re-drawing table '%s'", tableName)
+
+    $('#' + tableName).DataTable()
+      .columns.adjust() // Auto-adjust column widths
+      .draw(false);
+  }
+
+  /**
+   * Get element with max value for key, from an array of objects
+   * @param {Object[]} array
+   * @param {string} key
+   */
+  function hasMaxOf(array, key)
+  {
+    let hasKey = array.find(x => x.hasOwnProperty(key));
+    if (!hasKey)
+    {
+      return null
+    }
+    let max = hasKey[key]
+    let hasMax = hasKey
+    array.forEach(x =>
+    {
+      if (x[key] > max)
+      {
+        max = x[key];
+        hasMax = x;
+      }
+    });
+    return hasMax;
+  }
+
+  /**
+ * Flatten a nested object by joining keys with dot notation.
+ * @param {Object} object
+ * @param {string} prefix Used only in the recursion.  Doesn't need to be passed.
+ * Example:
+ * {mammals: {dogs: 4, cats: 3}, fish: {goldFish: 2}}
+ * becomes
+ * {mammals.dogs: 4, mammals.cats: 3, fish.goldFish: 2}
+ */
+  function flatten(object, prefix)
+  {
+    var flatObject = {}
+    for (var prop in object)
+    {
+      var flatProp = prefix ? prefix + '.' + prop : prop;
+      if (typeof object[prop] === 'object' && !(Array.isArray(object[prop])))
+      {
+        Object.assign(flatObject, flatten(object[prop], flatProp))
+      } else
+      {
+        flatObject[flatProp] = object[prop]
+      }
+    }
+    return flatObject;
+  }
+
+
+  /**
+   * Get max value for key, from an array of objects
+   * @param {Object[]} array
+   * @param {string} key
+   */
+  function maxOf(array, key)
+  {
+    let hasKey = array.find(x => x.hasOwnProperty(key));
+    if (hasKey === null)
+    {
+      return null
+    }
+    let max = hasKey[key]
+    array.forEach(x =>
+    {
+      if (x[key] > max)
+      {
+        max = x[key];
+      }
+    });
+    return max;
+  }
+
+  /**
+   * Sort an array of objects by a specific key
+   * @param {string} key
+   * @param {string} direction 'asc' or 'desc'; defaults to 'asc'
+   * @returns {Object[]}  The array, sorted in place
+   */
+  if (!Array.prototype.sortBy)
+  {
+    Object.defineProperty(Array.prototype, 'sortBy', {
+      value: function (key, direction)
+      {
+        let numericalDirection = (direction === 'desc') ? -1 : 1;
+        return this.sort(function (a, b)
+        {
+          let aHasKey = (a.hasOwnProperty(key) && a[key] !== null && a[key] !== undefined)
+          let bHasKey = (b.hasOwnProperty(key) && b[key] !== null && b[key] !== undefined)
+          if (aHasKey && !bHasKey) return numericalDirection;
+          if (!aHasKey && bHasKey) return (-1) * numericalDirection;
+          if (!aHasKey && !bHasKey) return 0;
+          if (a[key] > b[key]) return numericalDirection;
+          if (a[key] < b[key]) return (-1) * numericalDirection;
+          return 0
+        });
+      },
+      configurable: true,
+      writable: true
+    });
+  }
+
+  function objectMatchesFilter(object, filter)
+  {
+    return Object.keys(filter).every(property =>
+    {
+      if (Array.isArray(filter[property]))
+      {
+        return filter[property].includes(object[property])
+      }
+      else
+      {
+        return object[property] === filter[property];
+      }
+    })
+  }
+
+  function isReverseLoan(lead)
+  {
+    return lead.loanType === 'L5VKYHNR' // HECM
+      || lead.loanType === 'L5VKYI93' // J REV
+  }
+
+
+
+  /**
+   * @param {Object} data The 'data' object passed by the ajax function,
+   *                        OR a plain object with prop .target which defines the element where the spinner will be displayed.
+   */
+  function loadSpinner(data)
+  {
+    if (data && data.target)
+    {
+      $(data.target).addClass('d-none')
+        .parent().append('<i class="fa fa-spinner fa-spin color-highlight"></i>')
+    }
+    else if (data && data.action === 'edit')
+    {
+      for (let id in data.data)
+      {
+        // If this is a row-reorder, place a spinner on the sequence column. The spinner will be removed upon re-rendering
+        if (data.data[id].hasOwnProperty('sequence'))
+        {
+          $('#' + id).find('td.reorder').html('<i class="fa fa-spinner fa-spin color-highlight"></i>')
+        }
+      }
+
+    } else if (data && data.action === 'remove')
+    {
+      for (let id in data.data)
+      {
+        $('#' + id + ' td.row-remove').find('i.fa-trash').addClass('fa-spinner').addClass('fa-spin').removeClass('fa-trash')
+      }
+    }
+    // In any case, set a spinner on the confirmation icon
+    $('.confirm-edit-icon.fa-check-circle').addClass('fa-spinner fa-spin').removeClass('fa-check-circle')
+  }
+
+  /**
+   * Editor returns empty values as empty strings; we change them to null values.
+   */
+  function removeEmptyStrings(object)
+  {
+    return Object.fromEntries(Object.entries(object).map(([key, value]) => [key, value === '' ? null : value]))
+  }
+
+
+  function googleScriptRun(functionName, ...args)
+  {
+    return new Promise((resolve, reject) =>
+    {
+      showLoadingSign()
+      // console.log('trying to run ', functionName, ...args)
+      google.script.run
+        .withSuccessHandler((response) =>
+        {
+          hideLoadingSign()
+          resolve(response)
+        })
+        .withFailureHandler(function (error)
+        {
+          somethingWentWrong(error)
+          reject(error.message + '\n' + error.stack)
+        })
+      [functionName](...args)
+    })
+  }
+
+  function googleScriptRunNoSpinner(functionName, ...args)
+  {
+    return new Promise((resolve, reject) =>
+    {
+      // console.log('trying to run ', functionName, ...args)
+      google.script.run
+        .withSuccessHandler((response) =>
+        {
+          resolve(response)
+        })
+        .withFailureHandler(function (error)
+        {
+          somethingWentWrong(error)
+          reject(error.message + '\n' + error.stack)
+        })
+      [functionName](...args)
+    })
+  }
+
+  function reloadPage()
+  {
+    // Redirect to home page and show alert
+    showRedirect({
+      message: "Package status updated.",
+      buttonMessage: "Return to Home Page",
+      href: formQueryUrl(context.scriptUrl, context.urlParams)
+    });
+  }
+
+  /**
+   * Convert a url and object of key: value pairs to a url with query parameters (.../?key=value&key2=value2&...)
+   * @param {string} url Base url
+   * @param {Object} params The query parameters
+   * @returns {string} the query url
+   */
+  function formQueryUrl(url, params)
+  {
+    if (!params) return url
+    return url + '?' + Object.keys(params)
+      .map(function (key)
+      {
+        return key + '=' + (params[key] === null ? '' : encodeURIComponent(params[key]))
+      })
+      .join('&')
+  }
+
+  // Initialize all confirmation buttons
+  function initBootstrapConfirmation()
+  {
+    $('[data-toggle=confirmation]').confirmation({
+      rootSelector: '[data-toggle=confirmation]',
+    });
+  }
+
+  function decodeHTML(text)
+  {
+    const dummyDiv = document.createElement('div');
+    dummyDiv.innerHTML = text;
+    return dummyDiv.innerText;
+  }
+
+  /**
+   * Initialize select2's on form elements
+   */
+  function initializeSelectTwos()
+  {
+    $('select.select-two').each(function ()
+    {
+      const select = $(this)
+      select.select2({
+        width: '100%',
+        tags: select.hasClass('select-two-tags'),
+        allowClear: true,
+        placeholder: {
+          id: null,
+          text: ''
+        }
+      })
+    })
+  }
+
+</script>

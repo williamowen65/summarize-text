@@ -2,20 +2,29 @@
 function testQueryEndpoint()
 {
   DEBUG = true
-  const queryEmbedding = getJsonFromFile('12-48V6bq_0CC2ZHEDa8zPlWXJsV0JjUG')
+  let queryText = "they are talking about bribery"
+  const queryEmbedding =
+    // Should this be an array?
+    Vertex.getEmbeddings({
+      task_type: "RETRIEVAL_QUERY",
+      content: queryText
+    })
+  // getJsonFromFile('12-48V6bq_0CC2ZHEDa8zPlWXJsV0JjUG')
   const query = {
-    deployed_index_id: "call_search_test_01",
+    //deployed_index_id: "call_search_test_01",
+    deployed_index_id: "call_search_1249",
     queries: [{
       datapoint: {
         datapoint_id: "0",
         feature_vector: queryEmbedding.predictions[0].embeddings.values
       },
-      neighbor_count: 3
+      neighbor_count: 3 // TODO: make this a parameter
     }]
   }
   const result = Vertex.queryEndpoint(
-    'https://1428670972.us-central1-644228337687.vdb.vertexai.goog',
-    '492726344778514432',
+    'https://1428670972.us-central1-644228337687.vdb.vertexai.goog', // TODO: update
+    // 'https://1428670972.us-central1-644228337687.vdb.vertexai.goog', // TODO: update
+    '492726344778514432', // endpoint id.  stays the same.
     query
   );
   console.log(JSON.stringify(result, null, 2))
@@ -107,7 +116,7 @@ function testCreateQueryEmbedding()
 function testGetOperation()
 {
   DEBUG = true
-  const result = Vertex.getOperation('5812632472948572160');
+  const result = Vertex.getOperation('4679379032339382272');
   console.log(JSON.stringify(result, null, 2))
 }
 
@@ -122,9 +131,9 @@ function testDeployIndex()
 {
   DEBUG = true;
   const result = Vertex.deployIndex(
-    '492726344778514432',
-    'projects/644228337687/locations/us-central1/indexes/326093158565806080',
-    'call_search_test_01'
+    '492726344778514432', // ID assigned to the endpoint
+    'projects/644228337687/locations/us-central1/indexes/' + '6009635888307372032', // id of the index
+    'call_search_1364' // assign a unique name
   );
   console.log(JSON.stringify(result, null, 2))
 }
@@ -183,8 +192,9 @@ function testCreateIndexEndpoint()
 function testCreateIndex()
 {
   DEBUG = true;
-  const result = Vertex.createIndex('demo-calls',
-    'gs://call_embeddings'
+  const result = Vertex.createIndex(
+    'calls-1364',
+    'gs://embeddings_1364'
   );
   console.log(JSON.stringify(result, null, 2))
 }
@@ -250,22 +260,22 @@ function testConvertEmbeddings()
 function testEmbeddings()
 {
   DEBUG = true;
-  // const projectCalls = FirebaseDatabase.get('projectCalls/1113')
-  // saveJsonToDrive(projectCalls)
-  const projectCalls = getJsonFromFile('1o9G5jLXCk7bmmwxMUzTzDqyQZcxqMTU4')
+  const projectCalls = FirebaseDatabase.get('projectCalls/1364')
+  // const projectCalls = getJsonFromFile('1o9G5jLXCk7bmmwxMUzTzDqyQZcxqMTU4')
   // console.log(projectCalls);
   const instances = Object.entries(projectCalls)
+    .filter(([id, call]) => call?.transcript)
     .map(([id, call]) =>
     ({
       task_type: "RETRIEVAL_DOCUMENT",
       title: id,
-      content: call.summary
+      content: call.transcript
     }))
-  // console.log(instances);
+  console.log("Got %s calls", instances.length);
   let vectors = []
   let batchStart = 0, batchSize = 5;
-  while (batchStart < 15)
-  { //instances.length) {
+  while (batchStart < instances.length)
+  {
     const batch = instances.slice(batchStart, batchStart + batchSize);
     const embeddings =
       Vertex.getEmbeddings(batch)
@@ -277,7 +287,12 @@ function testEmbeddings()
     )
     batchStart += batchSize
   }
-  saveJsonToDrive(vectors, "embeddings.json")
+  DriveApp.getRootFolder()
+    .createFile(
+      'embeddings.json',
+      vectors.map(x => JSON.stringify(x)).join('\n'),
+      'application/json'
+    )
 }
 
 function testVertex()

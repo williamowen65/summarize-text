@@ -10,7 +10,7 @@ const TIMEZONE = 'America/Los_Angeles'
 const PROPERTY_STORE = PropertiesService.getScriptProperties();
 const Instance = JSON.parse(PROPERTY_STORE.getProperty('instance') || '{}');
 
-var APP_TITLE = Instance.appTitle
+var APP_TITLE = Instance.appTitle || "Vertex AI Test"
 
 const PERCENT_PRECISION = 1000000
 
@@ -26,8 +26,8 @@ var BRAND_PRIMARY_HOVER_COLOR = "#58c3b1" //
 var BRAND_SECONDARY_HOVER_COLOR = ""
 var BRAND_SECONDARY_FADED_COLOR = ""
 
-var BRAND_LOGO_URL = 'https://www.doitrightplumbers.com/wp-content/uploads/2020/07/do-it-right-plumbers-logo-XL.png'
-var BRAND_FAVICON_URL = 'https://www.doitrightplumbers.com/wp-content/uploads/2020/07/do-it-right-plumbers-logo-XL-150x150.png'
+var BRAND_LOGO_URL = 'https://www.prisoncallreview.net/assets/img/logo.jpg'
+var BRAND_FAVICON_URL = 'https://www.prisoncallreview.net/assets/img/ico.png'
 
 // User roles
 var ROLE = {
